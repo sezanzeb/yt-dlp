@@ -2177,7 +2177,7 @@ class YoutubeDL:
             finally:
                 if os.path.exists(temp_file.name):
                     try:
-                        os.remove(temp_file.name)
+                        print('remove temp_file.name', temp_file.name); os.remove(temp_file.name)
                     except OSError:
                         self.report_warning(f'Unable to delete temporary file "{temp_file.name}"')
             f['__working'] = success
@@ -3209,7 +3209,7 @@ class YoutubeDL:
 
         for file in existing_files:
             self.report_file_delete(file)
-            os.remove(file)
+            print('remove file', file); os.remove(file)
         return None
 
     @_catch_unsafe_extension_error
@@ -3358,7 +3358,12 @@ class YoutubeDL:
             info_dict['filepath'] = temp_filename
             info_dict['__finaldir'] = os.path.dirname(os.path.abspath(encodeFilename(full_filename)))
             info_dict['__files_to_move'] = files_to_move
-            replace_info_dict(self.run_pp(MoveFilesAfterDownloadPP(self, False), info_dict))
+
+            # TODO variable names
+            _, b = self.run_pp(MoveFilesAfterDownloadPP(self, False), info_dict)
+            for c in b:
+                replace_info_dict(c)
+
             info_dict['__write_download_archive'] = self.params.get('force_write_download_archive')
         else:
             # Download
@@ -3676,7 +3681,9 @@ class YoutubeDL:
             if msg:
                 self.to_screen(msg % filename)
             try:
-                os.remove(filename)
+                if 'png' in filename or 'webp' in filename:
+                    print('thumbnail being removed!', filename)
+                print('remove filename 3', filename); os.remove(filename)
             except OSError:
                 self.report_warning(f'Unable to delete file {filename}')
             if filename in info.get('__files_to_move', []):  # NB: Delete even if None
@@ -3700,30 +3707,60 @@ class YoutubeDL:
         if '__files_to_move' not in infodict:
             infodict['__files_to_move'] = {}
         try:
-            files_to_delete, infodict = pp.run(infodict)
+            files_to_delete, output_infodicts = pp.run(infodict)
         except PostProcessingError as e:
             # Must be True and not 'only_download'
             if self.params.get('ignoreerrors') is True:
                 self.report_error(e)
-                return infodict
+                return [], [infodict]
             raise
 
-        if not files_to_delete:
-            return infodict
-        if self.params.get('keepvideo', False):
-            for f in files_to_delete:
-                infodict['__files_to_move'].setdefault(f, '')
-        else:
-            self._delete_downloaded_files(
-                *files_to_delete, info=infodict, msg='Deleting original file %s (pass -k to keep)')
-        return infodict
+        return files_to_delete, output_infodicts
 
     def run_all_pps(self, key, info, *, additional_pps=None):
         if key != 'video':
             self._forceprint(key, info)
-        for pp in (additional_pps or []) + self._pps[key]:
-            info = self.run_pp(pp, info)
+
+        pps = (additional_pps or []) + self._pps[key]
+        self.run_pps([info], pps)
+
         return info
+
+    def run_pps(self, input_infos, pps):
+        """Run a list of post processors on a list of infos."""
+        if len(pps) == 0:
+            return
+
+        remaining_pps = [*pps]
+        # don't pop on the passed pps, because it modifies the array in-place
+        pp = remaining_pps.pop(0)
+
+        output_infos = []
+        files_to_delete = []
+        for info in input_infos:
+            # run the next post-processor. if it splits the file, it returns multiple
+            # info dicts.
+            files_to_delete_, output_infos_ = self.run_pp(pp, info)
+            files_to_delete.extend(files_to_delete_)
+            output_infos.extend(output_infos_)
+
+        # Delete files only after the pipeline ran on each info dict, because the
+        # thumbnail file needs to stay until all of them have gotten their thumbnail
+        # embedded.
+        if self.params.get('keepvideo', False):
+            for f in files_to_delete:
+                for output_info in output_infos:
+                    output_info['__files_to_move'].setdefault(f, '')
+        else:
+            for output_info in output_infos:
+                self._delete_downloaded_files(
+                    *files_to_delete,
+                    info=output_info,
+                    msg='Deleting original file %s (pass -k to keep)'
+                )
+
+        # ensure all the following post-processors will be run as well
+        self.run_pps(output_infos, remaining_pps)
 
     def pre_process(self, ie_info, key='pre_process', files_to_move=None):
         info = dict(ie_info)
@@ -3741,7 +3778,7 @@ class YoutubeDL:
         info['filepath'] = filename
         info['__files_to_move'] = files_to_move or {}
         info = self.run_all_pps('post_process', info, additional_pps=info.get('__postprocessors'))
-        info = self.run_pp(MoveFilesAfterDownloadPP(self), info)
+        _, info = self.run_pp(MoveFilesAfterDownloadPP(self), info)
         del info['__files_to_move']
         return self.run_all_pps('after_move', info)
 

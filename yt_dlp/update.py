@@ -466,7 +466,7 @@ class Updater:
 
         try:
             if os.path.exists(old_filename or ''):
-                os.remove(old_filename)
+                print('remove old_filename', old_filename); os.remove(old_filename)
         except OSError:
             return self._report_error('Unable to remove the old version')
 
@@ -508,7 +508,7 @@ class Updater:
                             shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         elif old_filename:
             try:
-                os.remove(old_filename)
+                print('remove old_filename', old_filename); os.remove(old_filename)
             except OSError:
                 self._report_error('Unable to remove the old version')
 

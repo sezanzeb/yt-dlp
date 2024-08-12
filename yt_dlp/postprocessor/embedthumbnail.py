@@ -69,7 +69,7 @@ class EmbedThumbnailPP(FFmpegPostProcessor):
             return [], info
         thumbnail_filename = info['thumbnails'][idx]['filepath']
         if not os.path.exists(encodeFilename(thumbnail_filename)):
-            self.report_warning('Skipping embedding the thumbnail because the file is missing.')
+            self.report_warning(f'Skipping embedding the thumbnail because the file "{thumbnail_filename}" is missing.')
             return [], info
 
         # Correct extension for WebP file with wrong extension (see #25687, #25717)
@@ -227,8 +227,8 @@ class EmbedThumbnailPP(FFmpegPostProcessor):
 
         self.try_utime(filename, mtime, mtime)
         converted = original_thumbnail != thumbnail_filename
-        self._delete_downloaded_files(
+
+        return [
             thumbnail_filename if converted or not self._already_have_thumbnail else None,
-            original_thumbnail if converted and not self._already_have_thumbnail else None,
-            info=info)
-        return [], info
+            original_thumbnail if converted and not self._already_have_thumbnail else None
+        ], [info]

@@ -208,7 +208,7 @@ def write_json_file(obj, fn):
         os.rename(tf.name, fn)
     except Exception:
         with contextlib.suppress(OSError):
-            os.remove(tf.name)
+            print('remove tf.name', tf.name); os.remove(tf.name)
         raise
 
 

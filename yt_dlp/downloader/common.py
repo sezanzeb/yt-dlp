@@ -261,7 +261,7 @@ class FileDownloader:
     @wrap_file_access('remove')
     def try_remove(self, filename):
         if os.path.isfile(filename):
-            os.remove(filename)
+            print('remove filename 4', filename); os.remove(filename)
 
     @wrap_file_access('rename')
     def try_rename(self, old_filename, new_filename):

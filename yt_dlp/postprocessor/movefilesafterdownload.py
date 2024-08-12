@@ -39,7 +39,7 @@ class MoveFilesAfterDownloadPP(PostProcessor):
             if os.path.exists(encodeFilename(newfile)):
                 if self.get_param('overwrites', True):
                     self.report_warning(f'Replacing existing file "{newfile}"')
-                    os.remove(encodeFilename(newfile))
+                    print('remove encodeFilename(newfile)', encodeFilename(newfile)); os.remove(encodeFilename(newfile))
                 else:
                     self.report_warning(
                         f'Cannot move file "{oldfile}" out of temporary directory since "{newfile}" already exists. ')

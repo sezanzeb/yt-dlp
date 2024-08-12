@@ -39,6 +39,9 @@ _PLUGIN_CLASSES = load_plugins('postprocessor', 'PP')
 
 
 def get_postprocessor(key):
+    # TODO this is really hard to find, because I can't jump around using the class
+    #  definition in IDEs, leaving me puzzled over how a specific post processor
+    #  class ends up doing anything at all.
     return globals()[key + 'PP']
 
 

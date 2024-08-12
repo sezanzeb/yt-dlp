@@ -138,7 +138,7 @@ class PhantomJSwrapper:
     def __del__(self):
         for name in self._TMP_FILE_NAMES:
             with contextlib.suppress(OSError, KeyError):
-                os.remove(self._TMP_FILES[name].name)
+                print('remove self._TMP_FILES[name].name', self._TMP_FILES[name].name); os.remove(self._TMP_FILES[name].name)
 
     def _save_cookies(self, url):
         cookies = cookie_jar_to_list(self.extractor.cookiejar)

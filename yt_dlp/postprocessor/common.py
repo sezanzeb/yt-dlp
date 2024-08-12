@@ -2,6 +2,8 @@ import functools
 import json
 import os
 
+from pip._internal.utils.logging import getLogger
+
 from ..networking import Request
 from ..networking.exceptions import HTTPError, network_exceptions
 from ..utils import (
@@ -11,6 +13,8 @@ from ..utils import (
     deprecation_warning,
     encodeFilename,
 )
+
+logger = getLogger(__name__)
 
 
 class PostProcessorMetaClass(type):
@@ -92,10 +96,15 @@ class PostProcessor(metaclass=PostProcessorMetaClass):
             return self._downloader.write_debug(text, *args, **kwargs)
 
     def _delete_downloaded_files(self, *files_to_delete, **kwargs):
+        # TODO why is this needed when the `run` methods already return files to be
+        #  deleted, so that they are deleted afterwards? This can cause issues with
+        #  pipelines after the chapter split, if intermediate files are removed too
+        #  early
         if self._downloader:
             return self._downloader._delete_downloaded_files(*files_to_delete, **kwargs)
         for filename in set(filter(None, files_to_delete)):
-            os.remove(filename)
+            logger.verbose("Removed %s", filename)
+            print('remove filename 5', filename); os.remove(filename)
 
     def get_param(self, name, default=None, *args, **kwargs):
         if self._downloader:

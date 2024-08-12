@@ -422,6 +422,9 @@ class FFmpegPostProcessor(PostProcessor):
         self.real_run_ffmpeg(
             [(concat_file, ['-hide_banner', '-nostdin', '-f', 'concat', '-safe', '0'])],
             [(out_file, out_flags)])
+
+        # TODO return concat_file, to add it to the first return list of `run` to delete
+        #  it later, instead of calling _delete_downloaded_files
         self._delete_downloaded_files(concat_file)
 
     @classmethod
@@ -482,14 +485,14 @@ class FFmpegExtractAudioPP(FFmpegPostProcessor):
             raise PostProcessingError(f'audio conversion failed: {err.msg}')
 
     @PostProcessor._restrict_to(images=False)
-    def run(self, information):
-        orig_path = path = information['filepath']
-        target_format, _skip_msg = resolve_mapping(information['ext'], self.mapping)
-        if target_format == 'best' and information['ext'] in self.COMMON_AUDIO_EXTS:
+    def run(self, info):
+        orig_path = path = info['filepath']
+        target_format, _skip_msg = resolve_mapping(info['ext'], self.mapping)
+        if target_format == 'best' and info['ext'] in self.COMMON_AUDIO_EXTS:
             target_format, _skip_msg = None, 'the file is already in a common audio format'
         if not target_format:
             self.to_screen(f'Not converting audio {orig_path}; {_skip_msg}')
-            return [], information
+            return [], [info]
 
         filecodec = self.get_audio_codec(path)
         if filecodec is None:
@@ -514,33 +517,33 @@ class FFmpegExtractAudioPP(FFmpegPostProcessor):
         if acodec != 'copy':
             more_opts = self._quality_args(acodec)
 
-        temp_path = new_path = replace_extension(path, extension, information['ext'])
+        temp_path = new_path = replace_extension(path, extension, info['ext'])
 
         if new_path == path:
             if acodec == 'copy':
                 self.to_screen(f'Not converting audio {orig_path}; file is already in target format {target_format}')
-                return [], information
+                return [], [info]
             orig_path = prepend_extension(path, 'orig')
             temp_path = prepend_extension(path, 'temp')
         if (self._nopostoverwrites and os.path.exists(encodeFilename(new_path))
                 and os.path.exists(encodeFilename(orig_path))):
             self.to_screen(f'Post-process file {new_path} exists, skipping')
-            return [], information
+            return [], [info]
 
         self.to_screen(f'Destination: {new_path}')
         self.run_ffmpeg(path, temp_path, acodec, more_opts)
 
         os.replace(path, orig_path)
         os.replace(temp_path, new_path)
-        information['filepath'] = new_path
-        information['ext'] = extension
+        info['filepath'] = new_path
+        info['ext'] = extension
 
         # Try to update the date time for extracted audio file.
-        if information.get('filetime') is not None:
+        if info.get('filetime') is not None:
             self.try_utime(
-                new_path, time.time(), information['filetime'], errnote='Cannot update utime of audio file')
+                new_path, time.time(), info['filetime'], errnote='Cannot update utime of audio file')
 
-        return [orig_path], information
+        return [orig_path], [info]
 
 
 class FFmpegVideoConvertorPP(FFmpegPostProcessor):
@@ -567,7 +570,7 @@ class FFmpegVideoConvertorPP(FFmpegPostProcessor):
         target_ext, _skip_msg = resolve_mapping(source_ext, self.mapping)
         if _skip_msg:
             self.to_screen(f'Not {self._ACTION} media file "{filename}"; {_skip_msg}')
-            return [], info
+            return [], [info]
 
         outpath = replace_extension(filename, target_ext, source_ext)
         self.to_screen(f'{self._ACTION.title()} video from {source_ext} to {target_ext}; Destination: {outpath}')
@@ -575,7 +578,7 @@ class FFmpegVideoConvertorPP(FFmpegPostProcessor):
 
         info['filepath'] = outpath
         info['format'] = info['ext'] = target_ext
-        return [filename], info
+        return [filename], [info]
 
 
 class FFmpegVideoRemuxerPP(FFmpegVideoConvertorPP):
@@ -597,11 +600,11 @@ class FFmpegEmbedSubtitlePP(FFmpegPostProcessor):
     def run(self, info):
         if info['ext'] not in self.SUPPORTED_EXTS:
             self.to_screen(f'Subtitles can only be embedded in {", ".join(self.SUPPORTED_EXTS)} files')
-            return [], info
+            return [], [info]
         subtitles = info.get('requested_subtitles')
         if not subtitles:
             self.to_screen('There aren\'t any subtitles to embed')
-            return [], info
+            return [], [info]
 
         filename = info['filepath']
 
@@ -612,7 +615,7 @@ class FFmpegEmbedSubtitlePP(FFmpegPostProcessor):
         if info.get('duration') and not info.get('__real_download') and self._duration_mismatch(
                 self._get_real_video_duration(filename, False), info['duration']):
             self.to_screen(f'Skipping {self.pp_key()} since the real and expected durations mismatch')
-            return [], info
+            return [], [info]
         '''
 
         ext = info['ext']
@@ -640,7 +643,7 @@ class FFmpegEmbedSubtitlePP(FFmpegPostProcessor):
                 self.report_warning('ASS subtitles cannot be properly embedded in mp4 files; expect issues')
 
         if not sub_langs:
-            return [], info
+            return [], [info]
 
         input_files = [filename, *sub_filenames]
 
@@ -664,7 +667,7 @@ class FFmpegEmbedSubtitlePP(FFmpegPostProcessor):
         os.replace(temp_filename, filename)
 
         files_to_delete = [] if self._already_have_subtitle else sub_filenames
-        return files_to_delete, info
+        return files_to_delete, [info]
 
 
 class FFmpegMetadataPP(FFmpegPostProcessor):
@@ -705,16 +708,19 @@ class FFmpegMetadataPP(FFmpegPostProcessor):
 
         if not options:
             self.to_screen('There isn\'t any metadata to add')
-            return [], info
+            return [], [info]
 
         temp_filename = prepend_extension(filename, 'temp')
         self.to_screen(f'Adding metadata to "{filename}"')
         self.run_ffmpeg_multiple_files(
             (filename, metadata_filename), temp_filename,
             itertools.chain(self._options(info['ext']), *options))
+
+        # TODO return files_to_delete instead
         self._delete_downloaded_files(*files_to_delete)
+
         os.replace(temp_filename, filename)
-        return [], info
+        return [], [info]
 
     @staticmethod
     def _get_chapter_opts(chapters, metadata_filename):
@@ -839,7 +845,7 @@ class FFmpegMergerPP(FFmpegPostProcessor):
         self.to_screen(f'Merging formats into "{filename}"')
         self.run_ffmpeg_multiple_files(info['__files_to_merge'], temp_filename, args)
         os.rename(encodeFilename(temp_filename), encodeFilename(filename))
-        return info['__files_to_merge'], info
+        return info['__files_to_merge'], [info]
 
     def can_merge(self):
         # TODO: figure out merge-capable ffmpeg version
@@ -874,7 +880,7 @@ class FFmpegFixupStretchedPP(FFmpegFixupPostProcessor):
         if stretched_ratio not in (None, 1):
             self._fixup('Fixing aspect ratio', info['filepath'], [
                 *self.stream_copy_opts(), '-aspect', f'{stretched_ratio:f}'])
-        return [], info
+        return [], [info]
 
 
 class FFmpegFixupM4aPP(FFmpegFixupPostProcessor):
@@ -882,7 +888,7 @@ class FFmpegFixupM4aPP(FFmpegFixupPostProcessor):
     def run(self, info):
         if info.get('container') == 'm4a_dash':
             self._fixup('Correcting container', info['filepath'], [*self.stream_copy_opts(), '-f', 'mp4'])
-        return [], info
+        return [], [info]
 
 
 class FFmpegFixupM3u8PP(FFmpegFixupPostProcessor):
@@ -905,7 +911,7 @@ class FFmpegFixupM3u8PP(FFmpegFixupPostProcessor):
                 args.extend(['-bsf:a', 'aac_adtstoasc'])
             self._fixup('Fixing MPEG-TS in MP4 container', info['filepath'], [
                 *self.stream_copy_opts(), *args])
-        return [], info
+        return [], [info]
 
 
 class FFmpegFixupTimestampPP(FFmpegFixupPostProcessor):
@@ -926,7 +932,7 @@ class FFmpegFixupTimestampPP(FFmpegFixupPostProcessor):
         else:
             opts = ['-c', 'copy', '-bsf', 'setts=ts=TS-STARTPTS']
         self._fixup('Fixing frame timestamp', info['filepath'], [*opts, *self.stream_copy_opts(False), '-ss', self.trim])
-        return [], info
+        return [], [info]
 
 
 class FFmpegCopyStreamPP(FFmpegFixupPostProcessor):
@@ -935,7 +941,7 @@ class FFmpegCopyStreamPP(FFmpegFixupPostProcessor):
     @PostProcessor._restrict_to(images=False)
     def run(self, info):
         self._fixup(self.MESSAGE, info['filepath'], self.stream_copy_opts())
-        return [], info
+        return [], [info]
 
 
 class FFmpegFixupDurationPP(FFmpegCopyStreamPP):
@@ -961,7 +967,7 @@ class FFmpegSubtitlesConvertorPP(FFmpegPostProcessor):
             new_format = 'webvtt'
         if subs is None:
             self.to_screen('There aren\'t any subtitles to convert')
-            return [], info
+            return [], [info]
         self.to_screen('Converting subtitles')
         sub_filenames = []
         for lang, sub in subs.items():
@@ -1019,7 +1025,7 @@ class FFmpegSubtitlesConvertorPP(FFmpegPostProcessor):
             info['__files_to_move'][new_file] = replace_extension(
                 info['__files_to_move'][sub['filepath']], new_ext)
 
-        return sub_filenames, info
+        return sub_filenames, [info]
 
 
 class FFmpegSplitChaptersPP(FFmpegPostProcessor):
@@ -1055,18 +1061,31 @@ class FFmpegSplitChaptersPP(FFmpegPostProcessor):
         chapters = info.get('chapters') or []
         if not chapters:
             self.to_screen('Chapter information is unavailable')
-            return [], info
+            return [], [info]
 
         in_file = info['filepath']
         if self._force_keyframes and len(chapters) > 1:
             in_file = self.force_keyframes(in_file, (c['start_time'] for c in chapters))
         self.to_screen(f'Splitting video by chapters; {len(chapters)} chapters found')
+        output_infos = []
         for idx, chapter in enumerate(chapters):
             destination, opts = self._ffmpeg_args_for_chapter(idx + 1, chapter, info)
             self.real_run_ffmpeg([(in_file, opts)], [(destination, self.stream_copy_opts())])
-        if in_file != info['filepath']:
-            self._delete_downloaded_files(in_file, msg=None)
-        return [], info
+            new_info = {
+                **info,
+                'filepath': destination,
+                'filename': destination,
+                '_filename': destination,
+            }
+            output_infos.append(new_info)
+
+        # TODO I don't know what to do with this. Either way, it should be included
+        #  in the first argument, instead of doing unexpected deletions in the `run`
+        #  methods.
+        # if in_file != info['filepath']:
+        #     self._delete_downloaded_files(in_file, msg=None)
+
+        return [], output_infos
 
 
 class FFmpegThumbnailsConvertorPP(FFmpegPostProcessor):
@@ -1135,7 +1154,7 @@ class FFmpegThumbnailsConvertorPP(FFmpegPostProcessor):
 
         if not has_thumbnail:
             self.to_screen('There aren\'t any thumbnails to convert')
-        return files_to_delete, info
+        return files_to_delete, [info]
 
 
 class FFmpegConcatPP(FFmpegPostProcessor):
@@ -1170,7 +1189,7 @@ class FFmpegConcatPP(FFmpegPostProcessor):
     def run(self, info):
         entries = info.get('entries') or []
         if not any(entries) or (self._only_multi_video and info['_type'] != 'multi_video'):
-            return [], info
+            return [], [info]
         elif traverse_obj(entries, (..., lambda k, v: k == 'requested_downloads' and len(v) > 1)):
             raise PostProcessingError('Concatenation is not supported when downloading multiple separate formats')
 
@@ -1189,4 +1208,4 @@ class FFmpegConcatPP(FFmpegPostProcessor):
             'filepath': out_file,
             'ext': ie_copy['ext'],
         }]
-        return files_to_delete, info
+        return files_to_delete, [info]

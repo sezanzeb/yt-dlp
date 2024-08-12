@@ -72,7 +72,7 @@ class SponSkrubPP(PostProcessor):
 
         temp_filename = prepend_extension(filename, self._temp_ext)
         if os.path.exists(encodeFilename(temp_filename)):
-            os.remove(encodeFilename(temp_filename))
+            print('remove encodeFilename(temp_filename)', encodeFilename(temp_filename)); os.remove(encodeFilename(temp_filename))
 
         cmd = [self.path]
         if not self.cutout:

@@ -621,6 +621,11 @@ def get_postprocessors(opts):
             'api': opts.sponsorblock_api,
             'when': 'after_filter',
         }
+    if opts.split_chapters:
+        yield {
+            'key': 'FFmpegSplitChapters',
+            'force_keyframes': opts.force_keyframes_at_cuts,
+        }
     if opts.convertsubtitles:
         yield {
             'key': 'FFmpegSubtitlesConvertor',
@@ -708,11 +713,6 @@ def get_postprocessors(opts):
         if not opts.writethumbnail:
             opts.writethumbnail = True
             opts.outtmpl['pl_thumbnail'] = ''
-    if opts.split_chapters:
-        yield {
-            'key': 'FFmpegSplitChapters',
-            'force_keyframes': opts.force_keyframes_at_cuts,
-        }
     # XAttrMetadataPP should be run after post-processors that may change file contents
     if opts.xattrs:
         yield {'key': 'XAttrMetadata'}
